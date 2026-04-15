@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Kana Pro Mobile</title>
+    <style>
+        :root { --bg: #000; --text: #fff; --accent: #00ff00; }
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
+        #app { text-align: center; width: 100%; }
+        #word { font-size: 80px; font-weight: bold; margin-bottom: 20px; transition: 0.1s; }
+        #input-field { position: absolute; opacity: 0; pointer-events: none; }
+        #visual-input { font-size: 24px; color: var(--accent); min-height: 30px; letter-spacing: 2px; text-transform: lowercase; }
+        .shake { animation: shake 0.2s; color: red !important; }
+        @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-10px)} 75%{transform:translateX(10px)} }
+    </style>
+</head>
+<body onclick="document.getElementById('input-field').focus()">
+    <div id="app">
+        <div id="word">...</div>
+        <div id="visual-input"></div>
+        <input type="text" id="input-field" autofocus autocomplete="off" autocapitalize="none" spellcheck="false">
+    </div>
+    <script>
+        // 以後在 GitHub App 改這裡的單字即可
+        const wordList = [
+            { q: "ねこ", a: "neko" },
+            { q: "さくら", a: "sakura" },
+            { q: "すし", a: "sushi" },
+            { q: "たべる", a: "taberu" },
+            { q: "わたし", a: "watashi" }
+        ];
+
+        let current = {};
+        const wordEl = document.getElementById('word');
+        const inputEl = document.getElementById('input-field');
+        const visualEl = document.getElementById('visual-input');
+
+        function next() {
+            current = wordList[Math.floor(Math.random() * wordList.length)];
+            wordEl.innerText = current.q;
+            wordEl.style.color = "white";
+            inputEl.value = "";
+            visualEl.innerText = "";
+        }
+
+        inputEl.addEventListener('input', (e) => {
+            const val = e.target.value.toLowerCase();
+            visualEl.innerText = val;
+            if (current.a.startsWith(val)) {
+                if (val === current.a) {
+                    // 答對朗讀 (選配)
+                    const ut = new SpeechSynthesisUtterance(current.q);
+                    ut.lang = 'ja-JP';
+                    speechSynthesis.speak(ut);
+                    next();
+                }
+            } else {
+                wordEl.classList.add('shake');
+                setTimeout(() => wordEl.classList.remove('shake'), 200);
+                inputEl.value = ""; visualEl.innerText = "";
+            }
+        });
+        next();
+    </script>
+</body>
+</html>
