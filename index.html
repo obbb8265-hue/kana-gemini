@@ -5,29 +5,41 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Kana Master Pro</title>
     <style>
-        :root { --bg: #000; --text: #fff; --accent: #00ff00; --gray: #666; }
-        body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; overflow: hidden; }
+        :root { --bg: #000; --text: #fff; --accent: #00ff00; --gray: #444; --light-gray: #888; }
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; overflow: hidden; touch-action: manipulation; }
         
-        /* 畫面切換控制 */
         .screen { display: none; flex-direction: column; align-items: center; justify-content: center; height: 100vh; text-align: center; }
         .active { display: flex; }
 
-        /* 首頁風格 */
-        h1 { font-size: 1.5rem; letter-spacing: 4px; margin-bottom: 50px; color: var(--gray); }
+        /* 首頁 */
+        h1 { font-size: 1.2rem; letter-spacing: 4px; margin-bottom: 30px; color: var(--light-gray); }
         .menu-btn { 
             background: transparent; border: 1px solid var(--gray); color: var(--text);
-            padding: 15px 40px; margin: 10px; font-size: 1.2rem; cursor: pointer; border-radius: 5px; width: 200px;
+            padding: 15px; margin: 8px; font-size: 1.1rem; border-radius: 8px; width: 220px;
         }
-        .menu-btn:active { background: var(--text); color: var(--bg); }
+        
+        /* 模式切換按鈕組 */
+        .toggle-group { margin-bottom: 20px; display: flex; gap: 5px; }
+        .toggle-btn { 
+            background: #111; border: 1px solid var(--gray); color: var(--light-gray);
+            padding: 8px 15px; font-size: 0.9rem; border-radius: 5px;
+        }
+        .toggle-btn.selected { border-color: var(--accent); color: var(--accent); background: #002200; }
 
-        /* 測驗風格 */
+        /* 返回按鈕 (極簡) */
+        #back-btn { 
+            position: fixed; top: 20px; left: 20px; font-size: 0.9rem; color: var(--gray); 
+            background: none; border: 1px solid var(--gray); padding: 5px 12px; border-radius: 4px; z-index: 10;
+        }
+
+        /* 測驗區 */
         #word { font-size: 80px; font-weight: bold; transition: 0.2s; }
         #visual-input { font-size: 24px; color: var(--accent); min-height: 30px; margin-top: 10px; letter-spacing: 2px; }
-        #meaning { font-size: 20px; color: var(--gray); margin-top: 20px; opacity: 0; transition: 0.3s; }
-        #meaning.show { opacity: 1; color: var(--accent); }
+        #meaning { font-size: 20px; color: var(--accent); margin-top: 20px; opacity: 0; transition: 0.3s; }
+        #meaning.show { opacity: 1; }
         
         #input-field { position: absolute; opacity: 0; pointer-events: none; }
-        .hint-text { position: fixed; bottom: 30px; font-size: 0.8rem; color: #333; }
+        .hint-text { position: fixed; bottom: 30px; font-size: 0.8rem; color: #222; }
         .shake { animation: shake 0.2s; color: red !important; }
         @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-10px)} 75%{transform:translateX(10px)} }
     </style>
@@ -36,11 +48,18 @@
 
     <div id="home-screen" class="screen active">
         <h1>KANA MASTER</h1>
-        <button class="menu-btn" onclick="startQuiz('hira')">平假名模式</button>
-        <button class="menu-btn" onclick="startQuiz('kata')">片假名模式</button>
+        
+        <div class="toggle-group">
+            <button id="btn-random" class="toggle-btn selected" onclick="setOrder(true)">隨機模式</button>
+            <button id="btn-order" class="toggle-btn" onclick="setOrder(false)">順序模式</button>
+        </div>
+
+        <button class="menu-btn" onclick="startQuiz('hira')">平假名單字 (500)</button>
+        <button class="menu-btn" onclick="startQuiz('kata')">片假名單字 (500)</button>
     </div>
 
     <div id="quiz-screen" class="screen" onclick="handleScreenClick()">
+        <button id="back-btn" onclick="goHome(event)">BACK</button>
         <div id="word">...</div>
         <div id="visual-input"></div>
         <div id="meaning">意思</div>
@@ -50,7 +69,6 @@
 
 <script>
     // --- 詞庫數據 ---
-    // 你可以在這裡擴充到各 500 個單字
     const database = {
         hira: [
             { q: "ありがとう", a: "arigatou", m: "謝謝" },
@@ -58,6 +76,7 @@
             { q: "たべる", a: "taberu", m: "吃" },
             { q: "おはよう", a: "ohayou", m: "早安" },
             { q: "ねこ", a: "neko", m: "貓" }
+            // 你可以繼續在這裡手動或用 AI 增加單字
         ],
         kata: [
             { q: "カメラ", a: "kamera", m: "照相機" },
@@ -68,9 +87,10 @@
         ]
     };
 
-    let currentMode = [];
+    let isRandom = true; 
+    let currentQuizList = [];
     let currentIdx = 0;
-    let isWaiting = false; // 是否在等待點擊下一題
+    let isWaiting = false;
 
     const homeScreen = document.getElementById('home-screen');
     const quizScreen = document.getElementById('quiz-screen');
@@ -79,29 +99,44 @@
     const visualEl = document.getElementById('visual-input');
     const meaningEl = document.getElementById('meaning');
 
+    // 切換隨機/順序
+    function setOrder(random) {
+        isRandom = random;
+        document.getElementById('btn-random').classList.toggle('selected', random);
+        document.getElementById('btn-order').classList.toggle('selected', !random);
+    }
+
     // 啟動測驗
     function startQuiz(mode) {
-        currentMode = shuffle([...database[mode]]);
+        let list = [...database[mode]];
+        if (isRandom) {
+            list = list.sort(() => Math.random() - 0.5);
+        }
+        currentQuizList = list;
         currentIdx = 0;
+        isWaiting = false;
+        
         homeScreen.classList.remove('active');
         quizScreen.classList.add('active');
-        isWaiting = false;
         nextQuestion();
     }
 
-    // 洗牌
-    function shuffle(array) {
-        return array.sort(() => Math.random() - 0.5);
+    // 返回首頁
+    function goHome(event) {
+        event.stopPropagation(); // 防止觸發螢幕點擊事件
+        homeScreen.classList.add('active');
+        quizScreen.classList.remove('active');
+        inputEl.blur();
     }
 
     // 下一題
     function nextQuestion() {
-        if (currentIdx >= currentMode.length) {
-            alert("練習結束！將回到首頁。");
-            location.reload();
+        if (currentIdx >= currentQuizList.length) {
+            alert("練習結束！");
+            goHome(new Event('click'));
             return;
         }
-        const data = currentMode[currentIdx];
+        const data = currentQuizList[currentIdx];
         wordEl.innerText = data.q;
         wordEl.style.color = "white";
         meaningEl.innerText = data.m;
@@ -109,30 +144,27 @@
         visualEl.innerText = "";
         inputEl.value = "";
         isWaiting = false;
-        setTimeout(() => inputEl.focus(), 50);
+        setTimeout(() => inputEl.focus(), 100);
     }
 
     // 處理輸入
     inputEl.addEventListener('input', (e) => {
         if (isWaiting) return;
-        
         const val = e.target.value.toLowerCase();
         visualEl.innerText = val;
-        const target = currentMode[currentIdx].a;
+        const target = currentQuizList[currentIdx].a;
 
         if (target.startsWith(val)) {
             if (val === target) {
-                // 答對邏輯
                 isWaiting = true;
                 meaningEl.classList.add('show');
                 wordEl.style.color = "var(--accent)";
-                // 語音
-                const ut = new SpeechSynthesisUtterance(currentMode[currentIdx].q);
+                // 語音播放
+                const ut = new SpeechSynthesisUtterance(currentQuizList[currentIdx].q);
                 ut.lang = 'ja-JP';
                 speechSynthesis.speak(ut);
             }
         } else {
-            // 答錯
             wordEl.classList.add('shake');
             setTimeout(() => wordEl.classList.remove('shake'), 200);
             inputEl.value = "";
@@ -140,7 +172,7 @@
         }
     });
 
-    // 處理點擊 (答對後跳下一題，或平時自動對焦)
+    // 螢幕點擊邏輯
     function handleScreenClick() {
         if (isWaiting) {
             currentIdx++;
