@@ -3,65 +3,152 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Kana Pro Mobile</title>
+    <title>Kana Master Pro</title>
     <style>
-        :root { --bg: #000; --text: #fff; --accent: #00ff00; }
-        body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
-        #app { text-align: center; width: 100%; }
-        #word { font-size: 80px; font-weight: bold; margin-bottom: 20px; transition: 0.1s; }
+        :root { --bg: #000; --text: #fff; --accent: #00ff00; --gray: #666; }
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; overflow: hidden; }
+        
+        /* 畫面切換控制 */
+        .screen { display: none; flex-direction: column; align-items: center; justify-content: center; height: 100vh; text-align: center; }
+        .active { display: flex; }
+
+        /* 首頁風格 */
+        h1 { font-size: 1.5rem; letter-spacing: 4px; margin-bottom: 50px; color: var(--gray); }
+        .menu-btn { 
+            background: transparent; border: 1px solid var(--gray); color: var(--text);
+            padding: 15px 40px; margin: 10px; font-size: 1.2rem; cursor: pointer; border-radius: 5px; width: 200px;
+        }
+        .menu-btn:active { background: var(--text); color: var(--bg); }
+
+        /* 測驗風格 */
+        #word { font-size: 80px; font-weight: bold; transition: 0.2s; }
+        #visual-input { font-size: 24px; color: var(--accent); min-height: 30px; margin-top: 10px; letter-spacing: 2px; }
+        #meaning { font-size: 20px; color: var(--gray); margin-top: 20px; opacity: 0; transition: 0.3s; }
+        #meaning.show { opacity: 1; color: var(--accent); }
+        
         #input-field { position: absolute; opacity: 0; pointer-events: none; }
-        #visual-input { font-size: 24px; color: var(--accent); min-height: 30px; letter-spacing: 2px; text-transform: lowercase; }
+        .hint-text { position: fixed; bottom: 30px; font-size: 0.8rem; color: #333; }
         .shake { animation: shake 0.2s; color: red !important; }
         @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-10px)} 75%{transform:translateX(10px)} }
     </style>
 </head>
-<body onclick="document.getElementById('input-field').focus()">
-    <div id="app">
+<body>
+
+    <div id="home-screen" class="screen active">
+        <h1>KANA MASTER</h1>
+        <button class="menu-btn" onclick="startQuiz('hira')">平假名模式</button>
+        <button class="menu-btn" onclick="startQuiz('kata')">片假名模式</button>
+    </div>
+
+    <div id="quiz-screen" class="screen" onclick="handleScreenClick()">
         <div id="word">...</div>
         <div id="visual-input"></div>
+        <div id="meaning">意思</div>
         <input type="text" id="input-field" autofocus autocomplete="off" autocapitalize="none" spellcheck="false">
+        <div class="hint-text">答對後點擊螢幕繼續</div>
     </div>
-    <script>
-        // 以後在 GitHub App 改這裡的單字即可
-        const wordList = [
-            { q: "ねこ", a: "neko" },
-            { q: "さくら", a: "sakura" },
-            { q: "すし", a: "sushi" },
-            { q: "たべる", a: "taberu" },
-            { q: "わたし", a: "watashi" }
-        ];
 
-        let current = {};
-        const wordEl = document.getElementById('word');
-        const inputEl = document.getElementById('input-field');
-        const visualEl = document.getElementById('visual-input');
+<script>
+    // --- 詞庫數據 ---
+    // 你可以在這裡擴充到各 500 個單字
+    const database = {
+        hira: [
+            { q: "ありがとう", a: "arigatou", m: "謝謝" },
+            { q: "さくら", a: "sakura", m: "櫻花" },
+            { q: "たべる", a: "taberu", m: "吃" },
+            { q: "おはよう", a: "ohayou", m: "早安" },
+            { q: "ねこ", a: "neko", m: "貓" }
+        ],
+        kata: [
+            { q: "カメラ", a: "kamera", m: "照相機" },
+            { q: "スシ", a: "sushi", m: "壽司" },
+            { q: "トイレ", a: "toire", m: "廁所" },
+            { q: "アメリカ", a: "amerika", m: "美國" },
+            { q: "パン", a: "pan", m: "麵包" }
+        ]
+    };
 
-        function next() {
-            current = wordList[Math.floor(Math.random() * wordList.length)];
-            wordEl.innerText = current.q;
-            wordEl.style.color = "white";
+    let currentMode = [];
+    let currentIdx = 0;
+    let isWaiting = false; // 是否在等待點擊下一題
+
+    const homeScreen = document.getElementById('home-screen');
+    const quizScreen = document.getElementById('quiz-screen');
+    const wordEl = document.getElementById('word');
+    const inputEl = document.getElementById('input-field');
+    const visualEl = document.getElementById('visual-input');
+    const meaningEl = document.getElementById('meaning');
+
+    // 啟動測驗
+    function startQuiz(mode) {
+        currentMode = shuffle([...database[mode]]);
+        currentIdx = 0;
+        homeScreen.classList.remove('active');
+        quizScreen.classList.add('active');
+        isWaiting = false;
+        nextQuestion();
+    }
+
+    // 洗牌
+    function shuffle(array) {
+        return array.sort(() => Math.random() - 0.5);
+    }
+
+    // 下一題
+    function nextQuestion() {
+        if (currentIdx >= currentMode.length) {
+            alert("練習結束！將回到首頁。");
+            location.reload();
+            return;
+        }
+        const data = currentMode[currentIdx];
+        wordEl.innerText = data.q;
+        wordEl.style.color = "white";
+        meaningEl.innerText = data.m;
+        meaningEl.classList.remove('show');
+        visualEl.innerText = "";
+        inputEl.value = "";
+        isWaiting = false;
+        setTimeout(() => inputEl.focus(), 50);
+    }
+
+    // 處理輸入
+    inputEl.addEventListener('input', (e) => {
+        if (isWaiting) return;
+        
+        const val = e.target.value.toLowerCase();
+        visualEl.innerText = val;
+        const target = currentMode[currentIdx].a;
+
+        if (target.startsWith(val)) {
+            if (val === target) {
+                // 答對邏輯
+                isWaiting = true;
+                meaningEl.classList.add('show');
+                wordEl.style.color = "var(--accent)";
+                // 語音
+                const ut = new SpeechSynthesisUtterance(currentMode[currentIdx].q);
+                ut.lang = 'ja-JP';
+                speechSynthesis.speak(ut);
+            }
+        } else {
+            // 答錯
+            wordEl.classList.add('shake');
+            setTimeout(() => wordEl.classList.remove('shake'), 200);
             inputEl.value = "";
             visualEl.innerText = "";
         }
+    });
 
-        inputEl.addEventListener('input', (e) => {
-            const val = e.target.value.toLowerCase();
-            visualEl.innerText = val;
-            if (current.a.startsWith(val)) {
-                if (val === current.a) {
-                    // 答對朗讀 (選配)
-                    const ut = new SpeechSynthesisUtterance(current.q);
-                    ut.lang = 'ja-JP';
-                    speechSynthesis.speak(ut);
-                    next();
-                }
-            } else {
-                wordEl.classList.add('shake');
-                setTimeout(() => wordEl.classList.remove('shake'), 200);
-                inputEl.value = ""; visualEl.innerText = "";
-            }
-        });
-        next();
-    </script>
+    // 處理點擊 (答對後跳下一題，或平時自動對焦)
+    function handleScreenClick() {
+        if (isWaiting) {
+            currentIdx++;
+            nextQuestion();
+        } else {
+            inputEl.focus();
+        }
+    }
+</script>
 </body>
 </html>
